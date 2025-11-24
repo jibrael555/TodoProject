@@ -3,6 +3,9 @@
 #include <iostream>
 #include <cctype>
 
+
+//auto todoTable = connectToDB("localhost", "root", "root");
+
 //mysqlx::Table connectToDB(std::string host, std::string user, std::string password) {
 //	try {
 //		mysqlx::Session session(host, user, password);
@@ -34,6 +37,19 @@
 //
 //	return 0;
 //}
+
+
+void displayTodoType(mysqlx::Session &session) {
+	auto result = session.sql("select id, nama from todo_types;").execute();
+	auto rows = result.fetchAll();
+	std::cout << "Tipe Todo yang tersedia:\n";
+
+	for (const auto& row : rows) {
+		int type_id = static_cast<int>(row[0]);
+		std::string type_name = static_cast<std::string>(row[1]);
+		fmt::print("ID: {}, Name: {}\n", type_id, type_name);
+	}
+}
 
 int GetInputInt(const std::string prompt, const std::string invalid_massage) {
 	bool is_valid = false;
@@ -124,7 +140,6 @@ struct DatabaseCredentials {
 };
 
 int main() {
-	//auto todoTable = connectToDB("localhost", "root", "root");
 	DatabaseCredentials creds;
 	creds.host = "localhost";
 	creds.username = "root";
@@ -237,7 +252,10 @@ int main() {
 		std::cout << "2. Add Todo\n";
 		std::cout << "3. Delete Todo\n";
 		std::cout << "4. Update Todo\n";
-		std::cout << "5. Exit\n";
+		std::cout << "5. Add Todo Types\n";
+		std::cout << "6. Delete Todo Types\n";
+		std::cout << "7. Update Todo Types\n";
+		std::cout << "8. Exit\n";
 
 		std::cout << "Option : "; std::cin >> option;
 		std::cout << std::endl;
@@ -258,9 +276,13 @@ int main() {
 				int id = static_cast<int>(row[0]);
 				std::string name = static_cast<std::string>(row[1]);
 				bool is_done = static_cast<bool>(row[2]);
-
-				std::string type = static_cast<std::string>(row[3]);
-
+				std::string type;
+				if (row[3].isNull()) {
+					type = "Kosong";
+				}
+				else {
+					type = static_cast<std::string>(row[3]);
+				}
 				fmt::print("ID: {}, Name: {}, is done: {}, Type: {}\n", id, name, is_done, type);
 			}
 
@@ -292,10 +314,8 @@ int main() {
 			else {
 				std::cout << "Sukses menghapus todo dengan id : " << id << "\n\n";
 			}
-
 			break; 
 		}
-
 		case 4: {
 			int id = GetInputInt("Masukkan id todo yang ingin diupdate : ", "ID tidak valid!");
 			
@@ -322,15 +342,7 @@ int main() {
 					.execute();
 			}
 
-			auto result = session.sql("select id, nama from todo_types;").execute();
-			auto rows = result.fetchAll();
-			std::cout << "Tipe Todo yang tersedia:\n";
-			
-			for (const auto& row : rows) {
-				int type_id = static_cast<int>(row[0]);
-				std::string type_name = static_cast<std::string>(row[1]);
-				fmt::print("ID: {}, Name: {}\n", type_id, type_name);
-			}
+			displayTodoType(session);
 
 			int todo_type_id_input = GetInputInt("Masukkan todo type id baru(biarkan kosong jika tidak ingin update) :", "");
 
@@ -356,7 +368,62 @@ int main() {
 
 			break; 
 		}
-		case 5:
+		case 5: {
+			std::string namatypes = GetInput("Masukkan Nama Todo Type : ", "Masukan invalid!");
+			auto result = todoTypesTable.insert("nama", "user_id").values(namatypes, user.id).execute();
+			std::cout << "Sukses menambahkan todo : " << namatypes << "\n\n";
+			break;
+		}
+		case 6: {
+			int idtodo;
+			std::cout << "Masukkan id Todo Types yang ingin dihapus: "; std::cin >> idtodo;
+
+			auto result = session.sql("select name, is_done from todos where todo_types_id=?")
+				.bind(idtodo)
+				.execute();
+			auto rows = result.fetchAll();
+
+			if (result.count() == 0) {
+				std::cout << "Todo belum ada" << std::endl;
+			}
+			else {
+				for (const auto& row : rows) {
+					int id = static_cast<int>(row[0]);
+					std::string name = static_cast<std::string>(row[1]);
+					bool is_done = static_cast<bool>(row[2]);
+					std::string type;
+					if (row[3].isNull()) {
+						type = "Kosong";
+					}
+					else {
+						type = static_cast<std::string>(row[3]);
+					}
+					fmt::print("ID: {}, Name: {}, is done: {}, Type: {}\n", id, name, is_done, type);
+				}
+			}
+
+			bool yakin_hapus = confirm("Menghapus Todo Types akan menghapus semua Todo ini. Yakin ingin hapus? (y/n): ");
+
+			if (yakin_hapus) {
+				auto result = todoTable
+					.remove()
+					.where("todo_types_id = :idtodo AND user_id = :user_id")
+					.bind("idtodo", idtodo)
+					.bind("user_id", user.id)
+					.execute();
+
+				const int count = static_cast<int>(result.getAffectedItemsCount());
+
+				if (count == 0) {
+					std::cout << "gagal menghapus todo." << std::endl;
+				}
+				else {
+					std::cout << "Sukses menghapus todo dengan id : " << id << "\n\n";
+				}
+			}
+			
+		}
+		case 8:
 			std::cout << "Exiting...\n";
 			return 0;
 			break;
