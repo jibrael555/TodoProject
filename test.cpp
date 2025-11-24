@@ -37,23 +37,30 @@
 
 int GetInputInt(const std::string prompt, const std::string invalid_massage) {
 	bool is_valid = false;
-	int input;
+	std::string input = "";
+	int number = 0;
 
 	while (!is_valid) {
-		std::cin.clear();
 		std::cout << prompt;
-		std::cin >> input;
+		std::getline(std::cin>>std::ws, input, '\n');
 
-		if (std::cin.fail()) {
+		if (!std::cin) {
 			std::cin.clear();
 			std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 			std::cout << invalid_massage << std::endl;
 			continue;
 		}
 
-		is_valid = true;
+		try {
+			number = std::stoi(input);
+			std::cin.clear();
+			is_valid = true;
+		}
+		catch (std::invalid_argument a) {
+			std::cout << "tolong masukkan angka yang valid.\n";
+		}
 	}
-	return input;
+	return number;
 }
 
 std::string GetInput(const std::string prompt, const std::string invalid_massage) {
@@ -129,6 +136,8 @@ int main() {
 	mysqlx::Table todoTypesTable = schema.getTable("todo_types");
 	
 	mysqlx::Table userTable = schema.getTable("users");
+	
+	session.sql("use todo;").execute();
 
 	bool login = true;
 	User user;
@@ -235,7 +244,6 @@ int main() {
 
 		switch (option) {
 		case 1: {
-			session.sql("use todo;").execute();
 			auto result = session.sql("select td.id, td.name, td.is_done, ty.nama as type from todos td left join todo_types ty on td.todo_types_id = ty.id where td.user_id = ?")
 				.bind(user.id)
 				.execute();
@@ -304,22 +312,43 @@ int main() {
 				break;
 			}
 
-			std::string namaTodo = GetInput("Masukkan nama baru : ", "Nama tidak valid!");
-			if (namaTodo.empty()) {
-				bool selesai = confirm("Tandai kalau sudah selesai y/n: ");
+			std::string namaTodo = GetInput("Masukkan nama baru (biarkan kosong jika tidak ingin update): ", "Nama tidak valid!");
+			if (!namaTodo.empty()) {
 				todoTable
 					.update()
-					.set("is_done", selesai)
+					.set("name", namaTodo)
 					.where("id = :id")
 					.bind("id", id)
 					.execute();
-				break;
 			}
+
+			auto result = session.sql("select id, nama from todo_types;").execute();
+			auto rows = result.fetchAll();
+			std::cout << "Tipe Todo yang tersedia:\n";
+			
+			for (const auto& row : rows) {
+				int type_id = static_cast<int>(row[0]);
+				std::string type_name = static_cast<std::string>(row[1]);
+				fmt::print("ID: {}, Name: {}\n", type_id, type_name);
+			}
+
+			int todo_type_id_input = GetInputInt("Masukkan todo type id baru(biarkan kosong jika tidak ingin update) :", "");
+
+			// handle invalid todo_type_id_input
+
+			if (todo_type_id_input != 0) {
+				todoTable
+					.update()
+					.set("todo_types_id", todo_type_id_input)
+					.where("id = :id")
+					.bind("id", id)
+					.execute();
+			}
+			
 			bool selesai = confirm("Tandai kalau sudah selesai y/n: ");
 
 			todoTable
 				.update()
-				.set("name", namaTodo)
 				.set("is_done", selesai)
 				.where("id = :id")
 				.bind("id",id)
