@@ -126,6 +126,7 @@ int main() {
 	mysqlx::Session session(creds.host, creds.username, creds.password);
 	mysqlx::Schema schema = session.getSchema("todo"); // nama db
 	mysqlx::Table todoTable = schema.getTable("todos");
+	mysqlx::Table todoTypesTable = schema.getTable("todo_types");
 	
 	mysqlx::Table userTable = schema.getTable("users");
 
@@ -231,28 +232,33 @@ int main() {
 
 		std::cout << "Option : "; std::cin >> option;
 		std::cout << std::endl;
+
 		switch (option) {
 		case 1: {
-			auto result = todoTable
-				.select("id", "name", "is_done")
-				.where("user_id=:id")
-				.bind("id", user.id)
+			session.sql("use todo;").execute();
+			auto result = session.sql("select td.id, td.name, td.is_done, ty.nama as type from todos td left join todo_types ty on td.todo_types_id = ty.id where td.user_id = ?")
+				.bind(user.id)
 				.execute();
 			auto rows = result.fetchAll();
+
 			if (result.count() == 0) {
 				std::cout << "Todo belum ada" << std::endl;
 				break;
 			}
-			
-			for (const auto& row : rows) {
+
+			for (const auto& row:rows) {
 				int id = static_cast<int>(row[0]);
 				std::string name = static_cast<std::string>(row[1]);
 				bool is_done = static_cast<bool>(row[2]);
 
-				fmt::print("ID: {}, Name: {}, is done: {}\n", id, name, is_done);
+				std::string type = static_cast<std::string>(row[3]);
+
+				fmt::print("ID: {}, Name: {}, is done: {}, Type: {}\n", id, name, is_done, type);
 			}
+
 			break;
 		}
+
 		case 2: {
 			std::string namatodo = GetInput("Masukkan Nama Todo : ", "Masukan invalid!");
 			
@@ -260,6 +266,7 @@ int main() {
 			std::cout << "Sukses menambahkan todo : " << namatodo << "\n\n";
 			break;
 		}
+
 		case 3: {
 			std::cout << "Masukan id todo yang ingin dihapus: "; std::cin >> id;	
 			auto result = todoTable
@@ -280,6 +287,7 @@ int main() {
 
 			break; 
 		}
+
 		case 4: {
 			int id = GetInputInt("Masukkan id todo yang ingin diupdate : ", "ID tidak valid!");
 			
@@ -319,11 +327,13 @@ int main() {
 
 			break; 
 		}
-		case 5: std::cout << "Exiting...\n";
-				return 0;
-				break;
-		default:std::cout << "Invalid option\n";
-				break;
+		case 5:
+			std::cout << "Exiting...\n";
+			return 0;
+			break;
+		default:
+			std::cout << "Invalid option\n";
+			break;
 		}
 		bool mau_lanjut = confirm("Mau lanjut? (y/n): ");
 
